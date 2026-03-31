@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: roboinfra
+Version: 1.0.1
+Summary: Python SDK for RoboInfra Robotics API
+Author: Ravindar J
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Classifier: Topic :: Scientific/Engineering
+Requires-Python: >=3.8
+Requires-Dist: requests>=2.28.0
+Dynamic: author
+Dynamic: classifier
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
