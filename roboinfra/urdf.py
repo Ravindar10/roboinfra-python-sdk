@@ -1,38 +1,51 @@
 # FILE: roboinfra/urdf.py
 #
-# BUG FIX: validate() now handles HTTP 400 as a ValidationResult(is_valid=False)
+# BUG FIX: body.get("data", {}) → body.get("data") or {}
 #
-# ROOT CAUSE:
-#   The API returns HTTP 400 when a URDF fails structural checks.
-#   Response body contains:
-#     { "success": false, "data": { "isValid": false, "errors": [...] } }
+# EXACT ROOT CAUSE (confirmed by testing against the live API):
 #
-#   client._handle_response() treated ALL 400 responses as errors and raised:
-#     RoboInfraError("Bad request: Root element must be <robot> | ...")
+#   The API returns this JSON for an invalid URDF (HTTP 400):
+#     {
+#       "success": false,
+#       "statusCode": 400,
+#       "message": "Root element must be <robot> | URDF must contain at least one <link> element.",
+#       "data": null,        <-- data is null, NOT { "isValid": false, "errors": [...] }
+#       "errors": null
+#     }
 #
-#   This was wrong for /api/urdf/validate  a 400 here is a validation RESULT,
-#   not an API error. The fix: catch the RoboInfraError(status_code=400) in
-#   validate(), parse the response body, and return ValidationResult(is_valid=False).
+#   The old code used:
+#     data = body.get("data", {})
 #
-# BEFORE (broken):
-#   client.urdf.validate("bad.urdf")
-#   → raises RoboInfraError("Bad request: Root element must be <robot>")
-#   → any caller (action, user code) crashes even if they just wanted to check validity
+#   Python's dict.get(key, default) only uses the default when the KEY IS ABSENT.
+#   When the key EXISTS with a null value, it returns None, not the default.
+#   So data = None (not {}).
 #
-# AFTER (correct):
+#   Then:
+#     if "isValid" in data or "errors" in data:
+#   raises: TypeError: argument of type 'NoneType' is not iterable
+#
+#   That TypeError was caught by:
+#     except (_json.JSONDecodeError, Exception): pass
+#   which fell through to: raise  → re-raises the original RoboInfraError
+#
+#   So the 400 handling never worked. The SDK always raised RoboInfraError
+#   for invalid URDFs, even in the "fixed" version.
+#
+# THE FIX:
+#   data = body.get("data") or {}
+#   This works because: None or {} = {}
+#   Even if data key is absent OR null, data is always a dict.
+#
+# AFTER THIS FIX:
 #   client.urdf.validate("bad.urdf")
 #   → returns ValidationResult(is_valid=False, errors=["Root element must be <robot>", ...])
-#   → caller can do: if not result.is_valid: print(result.errors)
+#   → never raises RoboInfraError for invalid URDFs
 #
-# WHY only validate() gets this treatment, not analyze():
-#   For /api/urdf/analyze, a 400 means "URDF is invalid  fix it before analyzing".
-#   That IS an error for analyze() callers  they need to validate first.
-#   Only validate() should swallow 400 and convert it to a result.
+# ALSO PUBLISH TO PYPI after this fix so pip install roboinfra-sdk gets it.
 
 from .models import ValidationResult, AnalysisResult
 
-# URDF files must be <= 1MB (API enforces this)
-URDF_MAX_SIZE_BYTES = 1 * 1024 * 1024
+URDF_MAX_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
 
 
 class UrdfResource:
@@ -57,125 +70,88 @@ class UrdfResource:
             file_path: Path to your .urdf file. Max 1MB.
 
         Returns:
-            ValidationResult with:
-              .is_valid  (bool)   - True if all 9 checks pass
-              .errors    (list)   - list of error strings if invalid, empty if valid
+            ValidationResult:
+              .is_valid  bool  — True if all 9 checks pass
+              .errors    list  — error strings if invalid, empty if valid
 
         Raises:
-            FileNotFoundError   if file does not exist
-            ValueError          if file is wrong extension or too large
-            AuthError           if API key is invalid (HTTP 401)
-            QuotaError          if monthly quota exceeded (HTTP 429)
-            RoboInfraError      for server errors (HTTP 5xx) or other failures
+            FileNotFoundError  if file does not exist
+            ValueError         if file is wrong extension or too large
+            AuthError          if API key is invalid (HTTP 401)
+            QuotaError         if monthly quota exceeded (HTTP 429)
+            RoboInfraError     for server errors (HTTP 5xx) only
 
-        NOTE: HTTP 400 (invalid URDF) is returned as ValidationResult(is_valid=False),
-              NOT as a raised exception. This is intentional  an invalid URDF is a
-              valid outcome of validation, not an error condition.
-
-        Example:
-            result = client.urdf.validate("robot.urdf")
-            if result.is_valid:
-                print("Valid!")
-            else:
-                for error in result.errors:
-                    print(f"  Error: {error}")
+        NOTE: An invalid URDF (HTTP 400) returns ValidationResult(is_valid=False).
+              It does NOT raise an exception.
         """
         import os
-        from .client import RoboInfraError
         import json as _json
+        from .client import RoboInfraError
 
-        # Client-side validation - fail fast before any HTTP call
         safe_path = self._client._validate_file(
-            file_path,
-            allowed_extensions=[".urdf"]
+            file_path, allowed_extensions=[".urdf"]
         )
 
-        # URDF-specific size limit (API enforces 1MB, we check locally first)
         size = os.path.getsize(safe_path)
         if size > URDF_MAX_SIZE_BYTES:
             raise ValueError(
-                f"URDF file is {size / 1024:.0f}KB - maximum allowed is 1MB. "
-                f"Reduce mesh references or split the file."
+                f"URDF file is {size / 1024:.0f}KB — maximum allowed is 1MB."
             )
 
-        # ── POST to API and handle the response ───────────────────────────────
         try:
             raw = self._client._post_file("/api/urdf/validate", safe_path)
+            # HTTP 200 path: raw = { "data": { "isValid": true, "errors": [] } }
+            data = (raw.get("data") or {})
+            return ValidationResult(data)
+
         except RoboInfraError as e:
-            # ── BUG FIX ───────────────────────────────────────────────────────
-            # HTTP 400 from /api/urdf/validate = structurally invalid URDF.
-            # The API includes the validation errors in the response body:
-            #   { "data": { "isValid": false, "errors": ["Root element must be <robot>", ...] } }
-            #
-            # We parse the body and return ValidationResult(is_valid=False, errors=[...])
-            # instead of re-raising  this is a validation RESULT, not an API error.
-            #
-            # All other errors (401, 403, 429, 5xx) are re-raised as-is.
             if e.status_code == 400 and e.response_body:
                 try:
                     body = _json.loads(e.response_body)
-                    data = body.get("data", {})
 
-                    # Confirm the body has validation result fields
-                    if "isValid" in data or "errors" in data:
-                        return ValidationResult(data)
+                    # ── THE FIX ───────────────────────────────────────────────
+                    # body.get("data") returns None when data is null in JSON.
+                    # "or {}" converts None to {} so the next lines never fail.
+                    # WRONG: body.get("data", {}) → returns None when key=null
+                    # RIGHT: body.get("data") or {}  → always returns a dict
+                    data = body.get("data") or {}
 
-                    # Fallback: no data.errors  try parsing the message field
-                    # API message format: "Error 1 | Error 2 | Error 3"
-                    msg = body.get("message", "")
-                    if msg:
-                        errors = [part.strip() for part in msg.split("|") if part.strip()]
-                        return ValidationResult({"isValid": False, "errors": errors})
+                    is_valid = data.get("isValid", False)
+
+                    # Prefer data.errors list; fall back to splitting message
+                    errors = data.get("errors") or []
+                    if not errors and not is_valid:
+                        msg = body.get("message", "")
+                        errors = [p.strip() for p in msg.split("|") if p.strip()]
+
+                    return ValidationResult({"isValid": is_valid, "errors": errors})
 
                 except (_json.JSONDecodeError, Exception):
-                    pass  # JSON parse failed  fall through to re-raise
+                    pass  # Body unparseable — fall through to re-raise
 
-            # Re-raise for all other cases:
-            # 401 AuthError, 403 PlanError, 429 QuotaError, 5xx server errors,
-            # or 400 where the body doesn't look like a validation result
+            # Re-raise for 401, 403, 429, 5xx, or truly unexpected 400
             raise
-
-        data = raw.get("data", raw)
-        return ValidationResult(data)
 
     def analyze(self, file_path: str) -> "AnalysisResult":
         """
-        Kinematic analysis - DOF, joint chain, end effectors.
+        Kinematic analysis — DOF, joint chain, end effectors.
         Requires Basic or Pro plan.
-
-        The URDF must pass validation first  if the file is structurally
-        invalid, the API returns 400 with the validation errors.
 
         Args:
             file_path: Path to your .urdf file. Max 1MB.
 
         Returns:
-            AnalysisResult with:
-              .robot_name     (str)   - robot name from <robot name="...">
-              .link_count     (int)   - number of links
-              .joint_count    (int)   - number of joints
-              .dof            (int)   - degrees of freedom (non-fixed joints)
-              .max_chain_depth (int)  - longest kinematic chain length
-              .root_link      (str)   - root link name
-              .end_effectors  (list)  - names of end effector links
-              .joints         (list)  - list of dicts with joint details
+            AnalysisResult with robot_name, link_count, joint_count,
+            dof, max_chain_depth, root_link, end_effectors, joints.
 
         Raises:
-            PlanError   if your plan is Free (requires Basic+)
+            PlanError   if plan is Free (requires Basic+)
             AuthError   if API key is invalid
             QuotaError  if monthly quota exceeded
-
-        Example:
-            result = client.urdf.analyze("robot.urdf")
-            print(f"DOF: {result.dof}")
-            print(f"End effectors: {result.end_effectors}")
-            for joint in result.joints:
-                print(f"  {joint['name']} ({joint['type']})")
         """
         safe_path = self._client._validate_file(
-            file_path,
-            allowed_extensions=[".urdf"]
+            file_path, allowed_extensions=[".urdf"]
         )
         raw = self._client._post_file("/api/urdf/analyze", safe_path)
-        data = raw.get("data", raw)
+        data = (raw.get("data") or {})
         return AnalysisResult(data)
