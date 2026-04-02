@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="roboinfra-sdk",
-    version="1.0.5",
+    version="1.0.6",
     description="Python SDK for RoboInfra URDF validation, Mesh Analyzer and 3D Model Converter robotics APIs",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
