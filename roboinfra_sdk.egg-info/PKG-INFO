@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: roboinfra-sdk
-Version: 1.0.4
+Version: 1.0.5
 Summary: Python SDK for RoboInfra URDF validation, Mesh Analyzer and 3D Model Converter robotics APIs
 Home-page: https://pypi.org/project/roboinfra-sdk/
 Author: Ravindar J
@@ -25,14 +25,15 @@ Dynamic: summary
 
 # roboinfra-sdk
 
-Python SDK for RoboInfra  Robotics API for URDF validation, kinematic analysis, 3D model conversion and mesh quality analysis.
+Python SDK for RoboInfra Robotics API for URDF validation, kinematic analysis, 3D model conversion and mesh quality analysis.
 
 [![PyPI version](https://badge.fury.io/py/roboinfra-sdk.svg)](https://pypi.org/project/roboinfra-sdk/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
 
 **API:** `https://roboinfra-api.azurewebsites.net`  
 **Dashboard:** `https://roboinfra-dashboard.azurewebsites.net`  
-**PyPI:** `https://pypi.org/project/roboinfra-sdk/`
+**PyPI:** `https://pypi.org/project/roboinfra-sdk/`  
+**GitHub Action:** `uses: roboinfra/validate-urdf-action@v1`
 
 ---
 
@@ -45,7 +46,6 @@ pip install roboinfra-sdk
 ---
 
 ## Quick Start
-
 
 ```python
 import roboinfra as roboinfra
@@ -70,7 +70,7 @@ analysis = client.urdf.analyze("robot.urdf")
 print(f"DOF: {analysis.dof}")
 print(f"End effectors: {analysis.end_effectors}")
 
-# 4. Convert 3D model (Pro plan)  OBJ → FBX now works (Q4 bug fixed)
+# 4. Convert 3D model (Pro plan)
 output = client.model.convert("robot.obj", "fbx", "robot.fbx")
 print(f"Saved: {output}")
 
@@ -89,7 +89,7 @@ if not mesh.is_watertight:
 1. Register at [roboinfra-dashboard.azurewebsites.net](https://roboinfra-dashboard.azurewebsites.net)
 2. Go to **API Keys** → Create key
 3. Keys start with `rk_`
-4. Free plan: 50 calls/month for URDF validation
+4. Free plan: 50 calls/month for URDF validation  no credit card required
 
 ---
 
@@ -133,14 +133,14 @@ result.errors     # list   empty when valid, list of strings when invalid
 8. `revolute` and `prismatic` joints must include `<limit>`
 9. Exactly one root link (no cycles, no orphans)
 
-**Real example  valid URDF:**
+**Valid URDF example:**
 ```python
 result = client.urdf.validate("robot.urdf")
 # result.is_valid → True
 # result.errors   → []
 ```
 
-**Real example  invalid URDF:**
+**Invalid URDF example:**
 ```python
 result = client.urdf.validate("bad_robot.urdf")
 # result.is_valid → False
@@ -169,7 +169,7 @@ result.end_effectors   # list   end effector link names
 result.joints          # list   joint details
 ```
 
-**Real example:**
+**Example:**
 ```python
 result = client.urdf.analyze("robot.urdf")
 # result.robot_name      → "sample_arm"
@@ -191,7 +191,7 @@ output = client.model.convert("robot.stl", "obj", "robot.obj")
 
 # All supported conversions:
 # .fbx  → obj, stl, glb, gltf
-# .obj  → stl, glb, gltf, fbx   ← fbx now works (Q4 bug fixed)
+# .obj  → stl, glb, gltf, fbx
 # .stl  → obj, glb, gltf
 # .gltf → obj, stl, glb
 # .glb  → obj, stl, gltf
@@ -202,16 +202,9 @@ output = client.model.convert("robot.stl", "obj", "robot.obj")
 
 **Examples:**
 ```python
-# STL → OBJ
-client.model.convert("robot.stl", "obj", "robot.obj")
-
-# OBJ → FBX (fixed in Q4  was returning 400 before)
-client.model.convert("robot.obj", "fbx", "robot.fbx")
-
-# FBX → GLB (for web viewers)
-client.model.convert("robot.fbx", "glb", "robot.glb")
-
-# OBJ → GLTF
+client.model.convert("robot.stl", "obj",  "robot.obj")
+client.model.convert("robot.obj", "fbx",  "robot.fbx")
+client.model.convert("robot.fbx", "glb",  "robot.glb")
 client.model.convert("robot.obj", "gltf", "robot.gltf")
 ```
 
@@ -235,10 +228,9 @@ result.center_of_mass   # dict   {"x": 0.0, "y": 0.0, "z": 0.21}
 result.meshes           # list   per-mesh breakdown
 ```
 
-**Real example:**
+**Example:**
 ```python
 result = client.model.analyze("robot_arm.stl")
-# result.mesh_count      → 2
 # result.total_triangles → 30240
 # result.is_watertight   → True
 # result.bounding_box    → {"x": 0.42, "y": 0.38, "z": 0.75}
@@ -272,7 +264,7 @@ except RoboInfraError as e:
 ```
 
 > **Note:** 400 errors (bad file, oversized file) also count against your monthly quota.
-> The SDK validates file size and extension **locally** before any HTTP call to prevent
+> The SDK validates file size and extension **locally before any HTTP call** to avoid
 > wasting quota on obvious errors.
 
 ---
@@ -298,30 +290,47 @@ except RoboInfraError as e:
 
 The SDK validates file size and extension **locally before any HTTP call**  no wasted quota on obvious errors.
 
-> **Why 1 MB for URDF?** URDF is plain XML text describing robot structure. Even complex
-> robots (43+ joints) are under 200 KB. 1 MB allows 5-7x headroom.
->
-> **Why 20 MB for 3D models?** Covers ~95% of robotics use cases including high-res
-> robot body parts. Ultra-large assemblies (>20 MB) will be supported in a future
-> Enterprise plan.
-
 ---
 
 ## CI/CD Integration
 
-Use the SDK inside any CI/CD pipeline today:
+### Option 1  GitHub Action (simplest, recommended)
+
+No Python required. Just add 3 lines to your workflow:
 
 ```yaml
-# GitHub Actions  validate URDF on every commit
+# .github/workflows/validate-urdf.yml
+name: Validate URDF
+on: [push, pull_request]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: roboinfra/validate-urdf-action@v1
+        with:
+          api-key: ${{ secrets.ROBOINFRA_API_KEY }}
+          file: urdf/robot.urdf
+```
+
+Full docs: [github.com/roboinfra/validate-urdf-action](https://github.com/Ravindar10/validate-urdf-action)
+
+---
+
+### Option 2  SDK inside a run step (more control)
+
+Use this approach when you need custom logic  multiple files, conditional checks, or integration with other tools:
+
+```yaml
 - name: Validate URDF
   run: |
     pip install roboinfra-sdk
     python - <<'EOF'
-    # Q3 FIX: use `import roboinfra`, not `import roboinfra_sdk`
     import roboinfra as roboinfra
     import sys
     client = roboinfra.Client("${{ secrets.ROBOINFRA_API_KEY }}")
-    result = client.urdf.validate("robot.urdf")
+    result = client.urdf.validate("urdf/robot.urdf")
     if not result.is_valid:
         print("URDF validation failed:")
         for e in result.errors:
@@ -330,15 +339,6 @@ Use the SDK inside any CI/CD pipeline today:
     print("URDF valid!")
     EOF
 ```
-
-> **Coming soon  :** A dedicated GitHub Action will simplify this further:
-> ```yaml
-> - uses: roboinfra/validate-urdf@v1
->   with:
->     api-key: ${{ secrets.ROBOINFRA_API_KEY }}
->     file: robot.urdf
-> ```
-> The SDK-based workflow above works today and will continue to work after Phase 8.
 
 ---
 
