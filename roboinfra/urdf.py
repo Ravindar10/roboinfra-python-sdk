@@ -89,7 +89,7 @@ class UrdfResource:
         from .client import RoboInfraError
 
         safe_path = self._client._validate_file(
-            file_path, allowed_extensions=[".urdf"]
+            file_path, allowed_extensions=[".urdf", ".xacro"]
         )
 
         size = os.path.getsize(safe_path)
@@ -150,7 +150,7 @@ class UrdfResource:
             QuotaError  if monthly quota exceeded
         """
         safe_path = self._client._validate_file(
-            file_path, allowed_extensions=[".urdf"]
+            file_path, allowed_extensions=[".urdf", ".xacro"]
         )
         raw = self._client._post_file("/api/urdf/analyze", safe_path)
         data = (raw.get("data") or {})

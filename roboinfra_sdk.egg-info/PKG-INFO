@@ -1,18 +1,26 @@
 Metadata-Version: 2.4
 Name: roboinfra-sdk
-Version: 1.0.5
-Summary: Python SDK for RoboInfra URDF validation, Mesh Analyzer and 3D Model Converter robotics APIs
-Home-page: https://pypi.org/project/roboinfra-sdk/
-Author: Ravindar J
-Keywords: robotics urdf api sdk mesh ros 3d-model
-Classifier: Programming Language :: Python :: 3
-Classifier: License :: OSI Approved :: MIT License
-Classifier: Operating System :: OS Independent
-Classifier: Topic :: Scientific/Engineering
+Version: 1.0.8
+Summary: Python SDK for RoboInfra — URDF validation, kinematic analysis, 3D model conversion and mesh analysis APIs for ROS developers
+Home-page: https://github.com/Ravindar10/roboinfra-python-sdk
+Author: RoboInfra
+Keywords: robotics,ros,urdf,validation,robot,kinematic,3d-model,mesh-analysis,gazebo,ci-cd,urdf-validator,model-conversion,stl,fbx,obj,gltf,moveit
+Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
-Requires-Dist: requests>=2.28.0
+Requires-Dist: requests>=2.20.0
 Dynamic: author
 Dynamic: classifier
 Dynamic: description
@@ -87,7 +95,7 @@ if not mesh.is_watertight:
 ## Get an API Key
 
 1. Register at [roboinfra-dashboard.azurewebsites.net](https://roboinfra-dashboard.azurewebsites.net)
-2. Go to **API Keys** → Create key
+2. Go to **API Keys** â†’ Create key
 3. Keys start with `rk_`
 4. Free plan: 50 calls/month for URDF validation  no credit card required
 
@@ -136,15 +144,15 @@ result.errors     # list   empty when valid, list of strings when invalid
 **Valid URDF example:**
 ```python
 result = client.urdf.validate("robot.urdf")
-# result.is_valid → True
-# result.errors   → []
+# result.is_valid â†’ True
+# result.errors   â†’ []
 ```
 
 **Invalid URDF example:**
 ```python
 result = client.urdf.validate("bad_robot.urdf")
-# result.is_valid → False
-# result.errors   → [
+# result.is_valid â†’ False
+# result.errors   â†’ [
 #     "Root element must be <robot>",
 #     "At least one <link> must exist"
 # ]
@@ -172,10 +180,10 @@ result.joints          # list   joint details
 **Example:**
 ```python
 result = client.urdf.analyze("robot.urdf")
-# result.robot_name      → "sample_arm"
-# result.dof             → 2
-# result.end_effectors   → ["tool0"]
-# result.joints[0]       → {"name": "joint_1", "type": "revolute",
+# result.robot_name      â†’ "sample_arm"
+# result.dof             â†’ 2
+# result.end_effectors   â†’ ["tool0"]
+# result.joints[0]       â†’ {"name": "joint_1", "type": "revolute",
 #                            "parent": "base_link", "child": "link_1"}
 ```
 
@@ -190,14 +198,14 @@ output = client.model.convert("robot.stl", "obj", "robot.obj")
 # Returns absolute path to saved output file
 
 # All supported conversions:
-# .fbx  → obj, stl, glb, gltf
-# .obj  → stl, glb, gltf, fbx
-# .stl  → obj, glb, gltf
-# .gltf → obj, stl, glb
-# .glb  → obj, stl, gltf
-# .dae  → obj, stl, glb
-# .3ds  → obj, stl, glb
-# .blend→ obj, stl, glb
+# .fbx  â†’ obj, stl, glb, gltf
+# .obj  â†’ stl, glb, gltf, fbx
+# .stl  â†’ obj, glb, gltf
+# .gltf â†’ obj, stl, glb
+# .glb  â†’ obj, stl, gltf
+# .dae  â†’ obj, stl, glb
+# .3ds  â†’ obj, stl, glb
+# .blendâ†’ obj, stl, glb
 ```
 
 **Examples:**
@@ -231,9 +239,9 @@ result.meshes           # list   per-mesh breakdown
 **Example:**
 ```python
 result = client.model.analyze("robot_arm.stl")
-# result.total_triangles → 30240
-# result.is_watertight   → True
-# result.bounding_box    → {"x": 0.42, "y": 0.38, "z": 0.75}
+# result.total_triangles â†’ 30240
+# result.is_watertight   â†’ True
+# result.bounding_box    â†’ {"x": 0.42, "y": 0.38, "z": 0.75}
 
 if not result.is_watertight:
     print("WARNING: mesh has holes  robot will fall through ground in Gazebo!")
