@@ -17,7 +17,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ── SDK version ───────────────────────────────────────────────────────────────
-__version__ = "1.0.0"
+__version__ = "1.0.9"
 
 # ── Limits ────────────────────────────────────────────────────────────────────
 MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024   # 25MB — API limit is 20MB, +5MB buffer
@@ -211,6 +211,30 @@ class Client:
         except (requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout) as e:
             raise RoboInfraError(f"Connection failed: {e}")
+        except requests.exceptions.RequestException as e:
+            raise RoboInfraError(f"Request failed: {e}")
+
+    def _post_two_files(self, endpoint: str, file_path_1: str, file_path_2: str,
+                         field_names: tuple = ("oldFile", "newFile")) -> dict:
+        """POST two files (for diff endpoint), return parsed JSON dict."""
+        try:
+            with open(file_path_1, "rb") as f1, open(file_path_2, "rb") as f2:
+                response = self._session.post(
+                    f"{self.BASE_URL}{endpoint}",
+                    files={
+                        field_names[0]: (os.path.basename(file_path_1), f1),
+                        field_names[1]: (os.path.basename(file_path_2), f2),
+                    },
+                    timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S),
+                )
+            return self._handle_response(response)
+
+        except (requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as e:
+            raise RoboInfraError(
+                f"Connection failed: {e}. "
+                f"Check your internet connection and that {self.BASE_URL} is reachable."
+            )
         except requests.exceptions.RequestException as e:
             raise RoboInfraError(f"Request failed: {e}")
 

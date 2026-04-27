@@ -111,3 +111,39 @@ class MeshAnalysisResult:
     def __repr__(self):
         return (f"<MeshAnalysisResult meshes={self.mesh_count} "
                 f"tris={self.total_triangles} watertight={self.is_watertight}>")
+
+class DiffResult:
+    """
+    Result from client.urdf.diff()
+
+    Attributes:
+        has_changes      (bool):  True if any differences detected
+        total_changes    (int):   Number of change entries
+        old_robot_name   (str):   Robot name from old file
+        new_robot_name   (str):   Robot name from new file
+        summary          (dict):  {links_added, links_removed, joints_added,
+                                   joints_removed, joints_modified, properties_changed}
+        changes          (list):  List of change dicts:
+                                   [{"action": "changed", "element": "joint",
+                                     "name": "j1", "field": "limit.upper",
+                                     "oldValue": "3.14", "newValue": "1.57"}]
+
+    Real example:
+        result.has_changes     → True
+        result.total_changes   → 3
+        result.summary         → {"linksAdded": 1, "jointsModified": 1, ...}
+        result.changes[0]      → {"action": "added", "element": "link", "name": "camera"}
+    """
+    def __init__(self, data: dict):
+        self.has_changes:     bool = data.get("hasChanges",    False)
+        self.total_changes:   int  = data.get("totalChanges",  0)
+        self.old_robot_name:  str  = data.get("oldRobotName",  "")
+        self.new_robot_name:  str  = data.get("newRobotName",  "")
+        self.summary:         dict = data.get("summary",       {})
+        self.changes:         list = data.get("changes",       [])
+
+    def __repr__(self):
+        if not self.has_changes:
+            return "<DiffResult no_changes>"
+        return (f"<DiffResult changes={self.total_changes} "
+                f"old='{self.old_robot_name}' new='{self.new_robot_name}'>")
