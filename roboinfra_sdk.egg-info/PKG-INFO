@@ -33,7 +33,7 @@ Dynamic: summary
 
 # roboinfra-sdk
 
-Python SDK for RoboInfra Robotics API for URDF validation, kinematic analysis, 3D model conversion and mesh quality analysis.
+Python SDK for RoboInfra URDF validation, kinematic analysis, semantic diff, xacro support, 3D model conversion and mesh analysis for ROS developers.
 
 [![PyPI version](https://badge.fury.io/py/roboinfra-sdk.svg)](https://pypi.org/project/roboinfra-sdk/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
@@ -88,6 +88,13 @@ print(f"Triangles: {mesh.total_triangles}")
 print(f"Watertight: {mesh.is_watertight}")
 if not mesh.is_watertight:
     print("WARNING: mesh has holes  will cause physics simulation issues!")
+
+# 6. URDF Diff (Basic + Pro plan)
+diff = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
+if diff.has_changes:
+    print(f"Found {diff.total_changes} change(s):")
+    for c in diff.changes:
+        print(f"  {c['action']} {c['element']} {c['name']}: {c.get('field','')}")
 ```
 
 ---
@@ -189,6 +196,46 @@ result = client.urdf.analyze("robot.urdf")
 
 ---
 
+### `client.urdf.diff(old_file_path, new_file_path)`  Basic + Pro plan
+
+Semantic diff between two URDF files. Detects added/removed/changed links, joints, limits, origins, geometry, and mass.
+
+```python
+result = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
+
+result.has_changes      # bool   True if any differences found
+result.total_changes    # int    number of change entries
+result.old_robot_name   # str    robot name from old file
+result.new_robot_name   # str    robot name from new file
+result.summary          # dict   {linksAdded, linksRemoved, jointsAdded, ...}
+result.changes          # list   list of change dicts
+```
+
+**Example  detect joint limit changes:**
+```python
+result = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
+if result.has_changes:
+    for c in result.changes:
+        if c["action"] == "changed" and "limit" in c.get("field", ""):
+            print(f"  Joint '{c["name"]}' {c['field']}: {c['oldValue']} -> {c['newValue']}")
+# Output:
+#   Joint 'elbow' limit.upper: 3.14 -> 1.57
+#   Joint 'elbow' limit.lower: -3.14 -> -1.57
+```
+
+**Example  no changes:**
+```python
+result = client.urdf.diff("robot.urdf", "robot.urdf")
+# result.has_changes    -> False
+# result.total_changes  -> 0
+# result.changes        -> []
+```
+
+**Change types detected:** robot name, links added/removed, link mass, visual/collision geometry, joints added/removed, joint type, parent/child, origin (xyz/rpy), axis, limits (lower/upper/effort/velocity).
+
+
+---
+
 ### `client.model.convert(file_path, target_format, output_path)`  Pro plan
 
 Convert 3D model files between formats. No Blender required.
@@ -281,9 +328,9 @@ except RoboInfraError as e:
 
 | Plan | Price | Quota | Features |
 |------|-------|-------|---------|
-| Free | $0/month | 50 calls | URDF validation only |
-| Basic | $25/month | 500 calls | URDF validation + kinematic analysis |
-| Pro | $75/month | 5,000 calls | All features (3D conversion + mesh analysis) |
+| Free | $0/month | 50 calls | URDF validation + 3D preview |
+| Basic | $25/month | 500 calls | + kinematic analysis + xacro + diff |
+| Pro | $75/month | 5,000 calls | + 3D conversion + mesh analysis |
 
 ---
 
@@ -291,8 +338,9 @@ except RoboInfraError as e:
 
 | Endpoint | Max file size | Allowed extensions |
 |----------|--------------|-------------------|
-| `urdf.validate` | **1 MB** | `.urdf` |
-| `urdf.analyze` | **1 MB** | `.urdf` |
+| `urdf.validate` | **1 MB** | `.urdf`, `.xacro` |
+| `urdf.analyze` | **1 MB** | `.urdf`, `.xacro` |
+| `urdf.diff` | **1 MB** each | `.urdf`, `.xacro` |
 | `model.convert` | **20 MB** | `.fbx .obj .stl .gltf .glb .dae .3ds .blend` |
 | `model.analyze` | **20 MB** | `.fbx .obj .stl .gltf .glb .dae .3ds .blend` |
 
