@@ -1,7 +1,7 @@
 Metadata-Version: 2.4
 Name: roboinfra-sdk
-Version: 1.0.8
-Summary: Python SDK for RoboInfra — URDF validation, kinematic analysis, 3D model conversion and mesh analysis APIs for ROS developers
+Version: 1.0.9
+Summary: Python SDK for RoboInfra URDF validation, kinematic analysis, 3D model conversion and mesh analysis APIs for ROS developers
 Home-page: https://github.com/Ravindar10/roboinfra-python-sdk
 Author: RoboInfra
 Keywords: robotics,ros,urdf,validation,robot,kinematic,3d-model,mesh-analysis,gazebo,ci-cd,urdf-validator,model-conversion,stl,fbx,obj,gltf,moveit
