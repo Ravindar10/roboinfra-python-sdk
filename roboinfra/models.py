@@ -147,3 +147,18 @@ class DiffResult:
             return "<DiffResult no_changes>"
         return (f"<DiffResult changes={self.total_changes} "
                 f"old='{self.old_robot_name}' new='{self.new_robot_name}'>")
+
+
+class ConversionResult:
+    """Result from client.urdf.convert_format()"""
+    def __init__(self, data: dict):
+        self.target_format:  str  = data.get("targetFormat",  "")
+        self.robot_name:     str  = data.get("robotName",     "")
+        self.converted_xml:  str  = data.get("convertedXml",  "")
+        self.link_count:     int  = data.get("linkCount",     0)
+        self.joint_count:    int  = data.get("jointCount",    0)
+        self.warnings:       list = data.get("warnings",      [])
+
+    def __repr__(self):
+        return (f"<ConversionResult format='{self.target_format}' "
+                f"robot='{self.robot_name}' links={self.link_count} joints={self.joint_count}>")

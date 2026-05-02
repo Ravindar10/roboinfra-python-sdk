@@ -1,7 +1,7 @@
 # FILE: roboinfra/urdf.py
 # Phase 13 — added diff() method
 
-from .models import ValidationResult, AnalysisResult, DiffResult
+from .models import ValidationResult, AnalysisResult, DiffResult, ConversionResult
 
 URDF_MAX_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB
 
@@ -153,3 +153,45 @@ class UrdfResource:
         )
         data = (raw.get("data") or {})
         return DiffResult(data)
+
+    def convert_format(self, file_path: str, target_format: str = "sdf") -> "ConversionResult":
+        """
+        Convert a URDF file to SDF (Gazebo) or MJCF (MuJoCo) format.
+        Requires Pro plan.
+
+        Args:
+            file_path:     Path to .urdf or .xacro file. Max 1MB.
+            target_format: "sdf" for Gazebo or "mjcf" for MuJoCo.
+
+        Returns:
+            ConversionResult with target_format, robot_name, converted_xml,
+            link_count, joint_count, warnings.
+
+        Raises:
+            PlanError    if plan is not Pro
+            AuthError    if API key is invalid
+            QuotaError   if monthly quota exceeded
+            ValueError   if target_format is not "sdf" or "mjcf"
+
+        Example:
+            sdf = client.urdf.convert_format("robot.urdf", "sdf")
+            with open("robot.sdf", "w") as f:
+                f.write(sdf.converted_xml)
+        """
+        import os
+
+        fmt = target_format.strip().lower()
+        if fmt not in ("sdf", "mjcf"):
+            raise ValueError(f"Unsupported format: '{target_format}'. Use 'sdf' or 'mjcf'.")
+
+        safe_path = self._client._validate_file(
+            file_path, allowed_extensions=[".urdf", ".xacro"]
+        )
+
+        size = os.path.getsize(safe_path)
+        if size > URDF_MAX_SIZE_BYTES:
+            raise ValueError(f"File is {size / 1024:.0f}KB — max 1MB.")
+
+        raw = self._client._post_file(f"/api/urdf/convert-format?target={fmt}", safe_path)
+        data = (raw.get("data") or {})
+        return ConversionResult(data)

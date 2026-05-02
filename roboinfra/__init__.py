@@ -2,7 +2,7 @@
 from .client import Client, RoboInfraError, AuthError, PlanError, QuotaError
 from .models import ValidationResult, AnalysisResult, MeshAnalysisResult
 
-__version__ = "1.0.9"
+__version__ = "1.0.11"
 __all__ = [
     "Client",
     "RoboInfraError",

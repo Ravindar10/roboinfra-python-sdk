@@ -1,6 +1,6 @@
 # roboinfra-sdk
 
-Python SDK for RoboInfra URDF validation, kinematic analysis, semantic diff, xacro support, 3D model conversion and mesh analysis for ROS developers.
+Python SDK for RoboInfra Robotics API for URDF validation, kinematic analysis, 3D model conversion and mesh quality analysis.
 
 [![PyPI version](https://badge.fury.io/py/roboinfra-sdk.svg)](https://pypi.org/project/roboinfra-sdk/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/)
@@ -51,17 +51,22 @@ print(f"Saved: {output}")
 
 # 5. Mesh quality analysis (Pro plan)
 mesh = client.model.analyze("robot.stl")
+print(f"Triangles: {mesh.total_triangles}, Watertight: {mesh.is_watertight}")
+
+# 6. URDF → SDF/MJCF conversion (Pro plan)
+sdf = client.urdf.convert_format("robot.urdf", "sdf")
+with open("robot.sdf", "w") as f:
+    f.write(sdf.converted_xml)
+print(f"Converted to SDF: {sdf.link_count} links, {sdf.joint_count} joints")
+
+mjcf = client.urdf.convert_format("robot.urdf", "mjcf")
+with open("robot.xml", "w") as f:
+    f.write(mjcf.converted_xml)
+print(f"Converted to MJCF: {mjcf.link_count} links, {mjcf.joint_count} joints")
 print(f"Triangles: {mesh.total_triangles}")
 print(f"Watertight: {mesh.is_watertight}")
 if not mesh.is_watertight:
     print("WARNING: mesh has holes  will cause physics simulation issues!")
-
-# 6. URDF Diff (Basic + Pro plan)
-diff = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
-if diff.has_changes:
-    print(f"Found {diff.total_changes} change(s):")
-    for c in diff.changes:
-        print(f"  {c['action']} {c['element']} {c['name']}: {c.get('field','')}")
 ```
 
 ---
@@ -163,45 +168,39 @@ result = client.urdf.analyze("robot.urdf")
 
 ---
 
-### `client.urdf.diff(old_file_path, new_file_path)`  Basic + Pro plan
-
-Semantic diff between two URDF files. Detects added/removed/changed links, joints, limits, origins, geometry, and mass.
-
-```python
-result = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
-
-result.has_changes      # bool   True if any differences found
-result.total_changes    # int    number of change entries
-result.old_robot_name   # str    robot name from old file
-result.new_robot_name   # str    robot name from new file
-result.summary          # dict   {linksAdded, linksRemoved, jointsAdded, ...}
-result.changes          # list   list of change dicts
-```
-
-**Example  detect joint limit changes:**
-```python
-result = client.urdf.diff("robot_v1.urdf", "robot_v2.urdf")
-if result.has_changes:
-    for c in result.changes:
-        if c["action"] == "changed" and "limit" in c.get("field", ""):
-            print(f"  Joint '{c["name"]}' {c['field']}: {c['oldValue']} -> {c['newValue']}")
-# Output:
-#   Joint 'elbow' limit.upper: 3.14 -> 1.57
-#   Joint 'elbow' limit.lower: -3.14 -> -1.57
-```
-
-**Example  no changes:**
-```python
-result = client.urdf.diff("robot.urdf", "robot.urdf")
-# result.has_changes    -> False
-# result.total_changes  -> 0
-# result.changes        -> []
-```
-
-**Change types detected:** robot name, links added/removed, link mass, visual/collision geometry, joints added/removed, joint type, parent/child, origin (xyz/rpy), axis, limits (lower/upper/effort/velocity).
-
 
 ---
+
+### `client.urdf.convert_format(file_path, target_format)`  Pro plan
+
+Convert URDF to Gazebo SDF or MuJoCo MJCF format.
+
+```python
+# Convert to Gazebo SDF
+sdf = client.urdf.convert_format("robot.urdf", "sdf")
+with open("robot.sdf", "w") as f:
+    f.write(sdf.converted_xml)
+
+# Convert to MuJoCo MJCF
+mjcf = client.urdf.convert_format("robot.urdf", "mjcf")
+with open("robot.xml", "w") as f:
+    f.write(mjcf.converted_xml)
+
+# Check warnings (e.g. mesh file references)
+for w in mjcf.warnings:
+    print(f"  Warning: {w}")
+
+sdf.target_format    # str  — "sdf" or "mjcf"
+sdf.robot_name       # str  — robot name from URDF
+sdf.converted_xml    # str  — the output XML
+sdf.link_count       # int
+sdf.joint_count      # int
+sdf.warnings         # list — non-fatal notes
+```
+
+**Supported formats:** `"sdf"` (Gazebo Sim v1.7) and `"mjcf"` (MuJoCo / Google DeepMind).
+
+**What gets converted:** all 6 joint types, inertia tensors, visual + collision geometry, materials, mesh references, joint limits/damping/friction, origin transforms. MJCF includes auto-generated actuators.
 
 ### `client.model.convert(file_path, target_format, output_path)`  Pro plan
 
@@ -295,9 +294,9 @@ except RoboInfraError as e:
 
 | Plan | Price | Quota | Features |
 |------|-------|-------|---------|
-| Free | $0/month | 50 calls | URDF validation + 3D preview |
-| Basic | $25/month | 500 calls | + kinematic analysis + xacro + diff |
-| Pro | $75/month | 5,000 calls | + 3D conversion + mesh analysis |
+| Free | $0/month | 50 calls | URDF validation only |
+| Basic | $25/month | 500 calls | URDF validation + kinematic analysis |
+| Pro | $75/month | 5,000 calls | All features (3D conversion + mesh analysis) |
 
 ---
 
@@ -305,9 +304,8 @@ except RoboInfraError as e:
 
 | Endpoint | Max file size | Allowed extensions |
 |----------|--------------|-------------------|
-| `urdf.validate` | **1 MB** | `.urdf`, `.xacro` |
-| `urdf.analyze` | **1 MB** | `.urdf`, `.xacro` |
-| `urdf.diff` | **1 MB** each | `.urdf`, `.xacro` |
+| `urdf.validate` | **1 MB** | `.urdf` |
+| `urdf.analyze` | **1 MB** | `.urdf` |
 | `model.convert` | **20 MB** | `.fbx .obj .stl .gltf .glb .dae .3ds .blend` |
 | `model.analyze` | **20 MB** | `.fbx .obj .stl .gltf .glb .dae .3ds .blend` |
 
